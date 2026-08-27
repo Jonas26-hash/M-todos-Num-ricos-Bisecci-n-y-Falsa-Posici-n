@@ -62,11 +62,29 @@ Consulta la [guía oficial de despliegue](https://docs.streamlit.io/deploy/strea
 
 Usar exclusivamente GitHub Pages requeriría adaptar la aplicación para ejecutarse en el navegador, cambiando su arquitectura. No basta con subir `app.py` ni exportar una captura HTML de los resultados.
 
-### Si vas a utilizar Vercel
+### Despliegue en Vercel
 
-Subir este proyecto a GitHub **no lo deja listo para desplegarse directamente en Vercel**. La versión actual se inicia con `streamlit run app.py`; no expone un `handler` HTTP ni una aplicación WSGI/ASGI como punto de entrada, que son las interfaces descritas en la [documentación del runtime Python de Vercel](https://vercel.com/docs/functions/runtimes/python).
+`app.py` exporta ahora `app = st.App(...)`, una aplicación ASGI real. La interfaz se encuentra en `streamlit_app.py` y se ejecuta por sesión; no se ejecuta al importar el servidor. Esto corrige el error **Found app.py but it does not export a top-level "app", "application", or "handler" variable** sin sustituir Streamlit ni los algoritmos.
 
-Antes de importar el repositorio en Vercel habría que adaptar y verificar su integración o separar la interfaz de los algoritmos Python. Este proyecto conserva la aplicación Streamlit solicitada y no incluye una adaptación ni un despliegue en Vercel. Los algoritmos de `methods.py` y los modelos de `problems.py` pueden reutilizarse en esa adaptación.
+Se fija **Streamlit 1.62.0**, que incluye esta API, y Python **3.12** para el despliegue mediante `.python-version`. No instales una versión antigua de Streamlit que no proporcione `st.App`.
+
+1. Importa el repositorio en Vercel o despliega el commit que contiene esta corrección.
+2. Usa la raíz del repositorio como **Root Directory**. Deja que Vercel detecte Python; no selecciones Flask, Next.js ni una salida estática.
+3. Conserva la instalación automática desde `requirements.txt`. No uses `streamlit run app.py` como **Build Command**: inicia un servidor y no termina como una compilación. Elimina ese override si lo habías añadido. No establezcas una carpeta de salida estática.
+4. Usa **Fluid compute**, necesario para las conexiones WebSocket. Streamlit utiliza tanto HTTP como WebSocket; una portada HTTP con estado 200 no basta para comprobar la aplicación.
+5. En la vista previa, ejecuta los dos métodos y comprueba pestañas, gráficos y descarga CSV antes de promover el despliegue a producción.
+
+El adaptador se puede comprobar localmente con el mismo contrato ASGI:
+
+```bash
+python -m uvicorn app:app --host 127.0.0.1 --port 8501
+```
+
+También se mantiene `streamlit run app.py` para uso local. Las pruebas verifican importación, HTTP, archivos del frontend y conexión WebSocket, además de la interfaz y los métodos. La verificación local no demuestra por sí sola que la configuración remota de Vercel esté lista.
+
+**Sesiones:** los resultados se conservan en la memoria del proceso mientras dure la sesión. Los reinicios, el escalado o los límites de duración del proveedor pueden interrumpirla; no se ofrece almacenamiento persistente. Si el despliegue carga pero queda reconectando, revisa los registros y la conexión `/_stcore/stream`, además del soporte WebSocket del entorno.
+
+Referencias: [runtime Python de Vercel](https://vercel.com/docs/functions/runtimes/python), [anuncio de WebSockets en Fluid compute](https://vercel.com/changelog/websocket-support-is-now-in-public-beta) y [adaptador ASGI de Streamlit](https://github.com/streamlit/streamlit/blob/1.62.0/lib/streamlit/web/server/starlette/starlette_app.py).
 
 ## Cómo utilizar la aplicación
 
@@ -162,19 +180,23 @@ Los gráficos llaman a los mismos modelos que los algoritmos. El marcador se col
 
 ```text
 metodos-numericos/
-├── app.py                 # Navegación, formulario y coordinación
+├── app.py                 # Entrada ASGI exportada como app
+├── streamlit_app.py       # Navegación, formulario y coordinación
 ├── methods.py             # Bisección, Regula Falsi y validación
 ├── problems.py            # Funciones, dominios y problemas
 ├── presentation.py        # Tablas, pasos, interpretación y exportación
 ├── charts.py              # Gráficos Plotly
 ├── styles.css             # Diseño adaptable
 ├── requirements.txt
+├── .python-version        # Python 3.12 para Vercel
+├── .vercelignore          # Excluye entorno local, cachés y secretos
 ├── README.md
 ├── .streamlit/config.toml  # Tema y configuración
 └── tests/
     ├── test_methods.py
     ├── test_presentation.py
-    └── test_app.py
+    ├── test_app.py
+    └── test_entrypoint.py  # Contrato ASGI, HTTP, assets y WebSocket
 ```
 
 La carpeta puede tener otro nombre, como `App_de_Met_Num`; ejecuta los comandos desde su raíz.

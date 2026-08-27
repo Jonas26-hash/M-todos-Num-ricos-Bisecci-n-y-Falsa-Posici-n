@@ -6,7 +6,7 @@ from streamlit.testing.v1 import AppTest
 
 from problems import CLOUD, NETWORK
 
-APP = str(Path(__file__).resolve().parents[1] / "app.py")
+APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 
 
 class AppTests(unittest.TestCase):
